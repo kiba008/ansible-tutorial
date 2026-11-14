@@ -1,16 +1,30 @@
 ---
-
 admin_user: ansibletest
-
 admin_group: sudo
-
 ansible_pull_repo: "https://github.com/kiba008/ansible-tutorial.git"
-
 managed_service: ssh
+system_timezone: America/Chicago
 
+# Installed by local.yml (state: latest)
 packages:
   - curl
   - vim
   - wget
+  - openssh-server
 
-system_timezone: America/Chicago
+# Installed by main.yml
+service_packages:
+  - ca-certificates
+  - cron
+  - fail2ban
+  - samba
+  - ufw
+
+docker_packages:
+  - docker-ce
+  - docker-ce-cli
+  - containerd.io
+  - docker-buildx-plugin
+  - docker-compose-plugin
+
+lan_subnet: 192.168.10.0/24
