@@ -10,7 +10,7 @@
 
   tasks:
 
-   # ---------- Base system (your original tasks) ----------
+   # ---------- Base system ----------
 
    - name: Update apt cache
      ansible.builtin.apt:
@@ -131,6 +131,8 @@
        - nmbd
 
    # ---------- Docker (official repo) ----------
+   # NOTE: if this server runs Debian's docker.io package, remove this section
+   # (docker-ce conflicts with docker.io). Check: dpkg -l | grep -E 'docker|containerd'
 
    - name: Add Docker apt repository
      ansible.builtin.deb822_repository:
@@ -161,35 +163,45 @@
        - docker
 
    # ---------- UFW (allow rules first, enable last) ----------
+   # Ports come from vars/main.yml. Docker-published ports bypass UFW;
+   # these rules cover the host itself plus host-network containers
+   # (node-exporter, Syncthing).
 
-   - name: Allow SSH from LAN
-     community.general.ufw:
-       rule: allow
-       proto: tcp
-       port: "22"
-       src: "{{ lan_subnet }}"
-
-   - name: Allow Samba TCP from LAN
+   - name: Allow LAN TCP ports
      community.general.ufw:
        rule: allow
        proto: tcp
        port: "{{ item }}"
        src: "{{ lan_subnet }}"
-     loop: ["139", "445"]
+     loop: "{{ ufw_lan_tcp_ports }}"
 
-   - name: Allow Samba NetBIOS UDP from LAN
+   - name: Allow LAN UDP ports
      community.general.ufw:
        rule: allow
        proto: udp
        port: "{{ item }}"
        src: "{{ lan_subnet }}"
-     loop: ["137", "138"]
+     loop: "{{ ufw_lan_udp_ports }}"
+
+   - name: Allow Docker networks to reach host ports (optional)
+     community.general.ufw:
+       rule: allow
+       proto: tcp
+       port: "{{ item.1 }}"
+       src: "{{ item.0 }}"
+     loop: "{{ docker_subnets | product(docker_subnet_ports) | list }}"
 
    - name: Set default deny incoming and enable UFW
      community.general.ufw:
        state: enabled
        default: deny
        direction: incoming
+
+  handlers:
+    - name: Restart fail2ban
+      ansible.builtin.systemd_service:
+        name: fail2ban
+        state: restarted
 
   handlers:
     - name: Restart fail2ban
