@@ -1,0 +1,16 @@
+---
+
+admin_user: ansibletest
+
+admin_group: sudo
+
+ansible_pull_repo: "https://github.com/kiba008/ansible-tutorial.git"
+
+managed_service: ssh
+
+packages:
+  - curl
+  - vim
+  - wget
+
+system_timezone: America/Chicago
