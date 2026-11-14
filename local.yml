@@ -10,6 +10,13 @@
 
   tasks:
 
+   # ---------- Base system (your original tasks) ----------
+
+   - name: Update apt cache
+     ansible.builtin.apt:
+       update_cache: true
+       cache_valid_time: 3600
+
    - name: Install packages and keep them updated
      ansible.builtin.package:
        name: "{{ packages }}"
@@ -67,18 +74,125 @@
        # Calling ansible-pull, only run if changes are made to the repository,
        # set the repo for ansible itself
        # redirect the output to /var/log/ansible-pull.log
-        
        job: "/usr/bin/ansible-pull -o -U {{ ansible_pull_repo }} >> /var/log/ansible-pull.log"
        cron_file: ansible-pull
-   
- #  - name:
-   
- #  - name:
-   
- #  - name:
-   
- #  - name:
-   
- #  - name:
-   
- #  - name:
+
+   # ---------- Service packages ----------
+
+   - name: Install service packages
+     ansible.builtin.apt:
+       name: "{{ service_packages }}"
+       state: present
+
+   # ---------- Fail2Ban ----------
+
+   - name: Deploy Fail2Ban local jail config
+     ansible.builtin.copy:
+       dest: /etc/fail2ban/jail.local
+       backup: true
+       owner: root
+       group: root
+       mode: "0644"
+       content: |
+         [DEFAULT]
+         ignoreip = 127.0.0.1/8 {{ lan_subnet }}
+         bantime  = 1h
+         findtime = 10m
+         maxretry = 5
+
+         [sshd]
+         enabled = true
+     notify: Restart fail2ban
+
+   - name: Enable and start Fail2Ban
+     ansible.builtin.systemd_service:
+       name: fail2ban
+       enabled: true
+       state: started
+
+   # ---------- Cron ----------
+
+   - name: Enable and start cron
+     ansible.builtin.systemd_service:
+       name: cron
+       enabled: true
+       state: started
+
+   # ---------- Samba ----------
+   # smb.conf is NOT managed here, so your existing shares are untouched.
+
+   - name: Enable and start Samba (smbd and nmbd)
+     ansible.builtin.systemd_service:
+       name: "{{ item }}"
+       enabled: true
+       state: started
+     loop:
+       - smbd
+       - nmbd
+
+   # ---------- Docker (official repo) ----------
+
+   - name: Add Docker apt repository
+     ansible.builtin.deb822_repository:
+       name: docker
+       types: deb
+       uris: https://download.docker.com/linux/debian
+       suites: "{{ ansible_facts['distribution_release'] }}"
+       components: stable
+       architectures: amd64
+       signed_by: https://download.docker.com/linux/debian/gpg
+       state: present
+       enabled: true
+
+   - name: Install Docker packages
+     ansible.builtin.apt:
+       name: "{{ docker_packages }}"
+       state: present
+       update_cache: true
+       cache_valid_time: 3600
+
+   - name: Enable and start Docker and containerd
+     ansible.builtin.systemd_service:
+       name: "{{ item }}"
+       enabled: true
+       state: started
+     loop:
+       - containerd
+       - docker
+
+   # ---------- UFW (allow rules first, enable last) ----------
+
+   - name: Allow SSH from LAN
+     community.general.ufw:
+       rule: allow
+       proto: tcp
+       port: "22"
+       src: "{{ lan_subnet }}"
+
+   - name: Allow Samba TCP from LAN
+     community.general.ufw:
+       rule: allow
+       proto: tcp
+       port: "{{ item }}"
+       src: "{{ lan_subnet }}"
+     loop: ["139", "445"]
+
+   - name: Allow Samba NetBIOS UDP from LAN
+     community.general.ufw:
+       rule: allow
+       proto: udp
+       port: "{{ item }}"
+       src: "{{ lan_subnet }}"
+     loop: ["137", "138"]
+
+   - name: Set default deny incoming and enable UFW
+     community.general.ufw:
+       state: enabled
+       default: deny
+       direction: incoming
+
+  handlers:
+    - name: Restart fail2ban
+      ansible.builtin.systemd_service:
+        name: fail2ban
+        state: restarted
