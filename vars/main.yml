@@ -29,3 +29,13 @@ docker_packages:
   - docker-compose-plugin
 
 lan_subnet: 192.168.10.0/24
+
+# UFW: allowed from lan_subnet only. Keep 22 first so SSH is always allowed.
+# 9100 = node-exporter (host network), 8384/22000/21027 = Syncthing (host network)
+ufw_lan_tcp_ports: ["22", "139", "445", "9100", "8384", "22000"]
+ufw_lan_udp_ports: ["137", "138", "22000", "21027"]
+ 
+# Optional: Docker network subnets that must reach host ports.
+# Leave empty until tested (e.g. docker_subnets: ["172.18.0.0/16"]).
+docker_subnets: []
+docker_subnet_ports: []
